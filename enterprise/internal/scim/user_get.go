@@ -8,6 +8,7 @@ import (
 	scimerrors "github.com/elimity-com/scim/errors"
 	"github.com/elimity-com/scim/optional"
 	"github.com/elimity-com/scim/schema"
+
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/scim/filter"
 	"github.com/sourcegraph/sourcegraph/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/types"
@@ -123,15 +124,23 @@ func (h *UserResourceHandler) convertUserToSCIMResource(user *types.UserForSCIM)
 	resourceAttributes["active"] = true
 
 	// Fall back to username and primary email in the user object if not set in account data
-	if resourceAttributes[AttrUserName] == nil || resourceAttributes[AttrUserName].(string) == "" {
-		resourceAttributes[AttrUserName] = user.Username
+	_, userNameIsString := resourceAttributes[AttrUserName].(string)
+	if userNameIsString {
+		{
+			if resourceAttributes[AttrUserName] == nil || resourceAttributes[AttrUserName].(string) == "" {
+				resourceAttributes[AttrUserName] = user.Username
+			}
+		}
 	}
-	if (resourceAttributes[AttrEmails] == nil || len(resourceAttributes[AttrEmails].([]interface{})) == 0) && user.Emails != nil && len(user.Emails) > 0 {
-		resourceAttributes[AttrEmails] = []interface{}{
-			map[string]interface{}{
-				"value":   user.Emails[0],
-				"primary": true,
-			},
+	_, emailsExist := resourceAttributes[AttrEmails].([]interface{})
+	if emailsExist {
+		if (resourceAttributes[AttrEmails] == nil || len(resourceAttributes[AttrEmails].([]interface{})) == 0) && user.Emails != nil && len(user.Emails) > 0 {
+			resourceAttributes[AttrEmails] = []interface{}{
+				map[string]interface{}{
+					"value":   user.Emails[0],
+					"primary": true,
+				},
+			}
 		}
 	}
 

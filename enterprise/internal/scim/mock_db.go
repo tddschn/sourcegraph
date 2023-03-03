@@ -14,6 +14,7 @@ func getMockDB() *database.MockDB {
 		{User: types.User{ID: 2, Username: "user2", DisplayName: "First Middle Last"}, Emails: []string{"b@example.com"}},
 		{User: types.User{ID: 3, Username: "user3", DisplayName: "First Last"}, SCIMExternalID: "id3"},
 		{User: types.User{ID: 4, Username: "user4"}, SCIMAccountData: "{\"externalUsername\":\"user4@company.com\"}", SCIMExternalID: "id4"},
+		{User: types.User{ID: 5, Username: "user5"}, SCIMAccountData: "{\"externalUsername\":\"primary@example.com\",\"emails\":[{\"value\":\"primary@example.com\",\"type\":\"work\",\"primary\": true},{\"value\":\"secondary@example.com\",\"type\":\"home\",\"primary\": false}]}", SCIMExternalID: "id5"},
 	}
 
 	userStore := database.NewMockUserStore()
