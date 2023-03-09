@@ -110,6 +110,7 @@ var planDetails = map[Plan]PlanDetails{
 		Features: []Feature{
 			&FeatureBatchChanges{MaxNumChangesets: 10},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 		},
 		ExpiredFeatures: []Feature{
 			FeatureACLs,
@@ -127,6 +128,7 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureCampaigns,
 			&FeatureBatchChanges{Unrestricted: true},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 			FeatureMonitoring,
 			FeatureBackupAndRestore,
 			FeatureCodeInsights,
@@ -143,6 +145,7 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureSSO,
 			&FeatureBatchChanges{MaxNumChangesets: 10},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 		},
 		ExpiredFeatures: []Feature{
 			FeatureACLs,
@@ -156,6 +159,7 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureSSO,
 			&FeatureBatchChanges{MaxNumChangesets: 10},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 		},
 		ExpiredFeatures: []Feature{
 			FeatureACLs,
@@ -169,6 +173,7 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureCampaigns,
 			&FeatureBatchChanges{Unrestricted: true},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 			FeatureCodeInsights,
 			FeatureSSO,
 		},
@@ -184,6 +189,7 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureCodeInsights,
 			&FeatureBatchChanges{Unrestricted: true},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 			FeatureExplicitPermissionsAPI,
 			FeatureSSO,
 		},
@@ -199,6 +205,7 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureCodeInsights,
 			&FeatureBatchChanges{Unrestricted: true},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 			FeatureExplicitPermissionsAPI,
 			FeatureSSO,
 		},
@@ -213,12 +220,14 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureMonitoring,
 			&FeatureBatchChanges{MaxNumChangesets: 10},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 		},
 		ExpiredFeatures: []Feature{
 			FeatureSSO,
 			FeatureMonitoring,
 			&FeatureBatchChanges{MaxNumChangesets: 10},
 			&FeaturePrivateRepositories{Unrestricted: true},
+			&FeatureRemoteRepositories{Unrestricted: true},
 		},
 	},
 	PlanFree1: {
@@ -226,11 +235,13 @@ var planDetails = map[Plan]PlanDetails{
 			FeatureMonitoring,
 			&FeatureBatchChanges{MaxNumChangesets: 10},
 			&FeaturePrivateRepositories{MaxNumPrivateRepos: 1},
+			&FeatureRemoteRepositories{MaxNumRemoteRepos: 10},
 		},
 		ExpiredFeatures: []Feature{
 			FeatureMonitoring,
 			&FeatureBatchChanges{MaxNumChangesets: 10},
 			&FeaturePrivateRepositories{MaxNumPrivateRepos: 1},
+			&FeatureRemoteRepositories{MaxNumRemoteRepos: 10},
 		},
 	},
 }

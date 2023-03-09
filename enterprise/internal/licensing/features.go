@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sourcegraph/sourcegraph/internal/conf/deploy"
 	"github.com/sourcegraph/sourcegraph/internal/errcode"
 	"github.com/sourcegraph/sourcegraph/lib/errors"
 )
@@ -119,6 +120,49 @@ func (f *FeaturePrivateRepositories) Check(info *Info) error {
 	}
 
 	// Otherwise, check the default private repositories feature.
+	if info.Plan().HasFeature(f, info.IsExpired()) {
+		return nil
+	}
+
+	return NewFeatureNotActivatedError(fmt.Sprintf("The feature %q is not activated in your Sourcegraph license. Upgrade your Sourcegraph subscription to use this feature.", f.FeatureName()))
+}
+
+// FeatureRemoteRepositories is whether you can add unlimited remote
+// repositories in Sourcegraph App. For other deployment types this Feature is
+// always set to Unrestricted.
+type FeatureRemoteRepositories struct {
+	// Unrestricted is true if there is no limit to the number of remote
+	// repositories that can be added. Additionally if the deployment type is
+	// not App, this is unlimited.
+	Unrestricted bool
+	// MaxNumRemoteRepos is the maximum number of remote repositories that can
+	// be added. If Unrestricted is true, this is ignored.
+	MaxNumRemoteRepos int
+}
+
+func (*FeatureRemoteRepositories) FeatureName() string {
+	return "remote-repositories"
+}
+
+func (f *FeatureRemoteRepositories) Check(info *Info) error {
+	if info == nil {
+		return NewFeatureNotActivatedError(fmt.Sprintf("The feature %q is not activated because it requires a valid Sourcegraph license. Purchase a Sourcegraph subscription to activate this feature.", f.FeatureName()))
+	}
+
+	// If we are outside of Sourcegraph App always use unrestricted.
+	if !deploy.IsApp() {
+		f.Unrestricted = true
+		return nil
+	}
+
+	// If the remote repositories tag exists on the license, use unrestricted
+	// remote repositories.
+	if info.HasTag(f.FeatureName()) {
+		f.Unrestricted = true
+		return nil
+	}
+
+	// Otherwise, check the default remote repositories feature.
 	if info.Plan().HasFeature(f, info.IsExpired()) {
 		return nil
 	}
