@@ -10,6 +10,7 @@ import (
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/enterprise"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/licensing"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/conf/conftypes"
 	"github.com/sourcegraph/sourcegraph/internal/database"
@@ -72,6 +73,11 @@ func newHandler(ctx context.Context, db database.DB, observationCtx *observation
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if conf.Get().ScimAuthToken != strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		licenseError := licensing.Check(licensing.FeatureSCIM)
+		if licenseError != nil {
+			http.Error(w, licenseError.Error(), http.StatusForbidden)
 			return
 		}
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/.api/scim")
