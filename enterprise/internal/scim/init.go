@@ -34,6 +34,8 @@ func getConfiguredIdentityProvider() IdentityProvider {
 	}
 }
 
+type scimMiddleware func(next http.Handler) http.Handler
+
 // Init sets SCIMHandler to a real handler.
 func Init(ctx context.Context, observationCtx *observation.Context, db database.DB, _ codeintel.Services, _ conftypes.UnifiedWatchable, s *enterprise.Services) error {
 	s.SCIMHandler = newHandler(ctx, db, observationCtx)
@@ -69,20 +71,34 @@ func newHandler(ctx context.Context, db database.DB, observationCtx *observation
 		ResourceTypes: resourceTypes,
 	}
 
-	// wrap server into logger handler
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if conf.Get().ScimAuthToken != strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") {
+	return scimAuthMiddleware(scimLicenseCheckMiddleware(scimRewriteMiddleware(server)))
+}
+
+func scimAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := conf.Get().ScimAuthToken
+		if len(token) == 0 || token != strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func scimLicenseCheckMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		licenseError := licensing.Check(licensing.FeatureSCIM)
 		if licenseError != nil {
 			http.Error(w, licenseError.Error(), http.StatusForbidden)
 			return
 		}
-		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/.api/scim")
-		server.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	})
+}
 
-	return handler
+func scimRewriteMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/.api/scim")
+		next.ServeHTTP(w, r)
+	})
 }
