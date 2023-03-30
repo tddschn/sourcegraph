@@ -21,6 +21,7 @@ export class Interaction {
     }
 
     public async toPrompt(includeContext: boolean): Promise<Message[]> {
+        console.log('prompt boi')
         if (includeContext) {
             const contextMessages = await this.context.then(messages => {
                 const contextFileNames = messages
