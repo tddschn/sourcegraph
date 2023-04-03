@@ -6,6 +6,8 @@ import { CodyCompletionItemProvider } from '../completions'
 import { CompletionsDocumentProvider } from '../completions/docprovider'
 import { getConfiguration } from '../configuration'
 import { ExtensionApi } from '../extension-api'
+import { InteractiveEditorSessionProvider } from '../interactive/editorSessionProvider'
+import { InteractiveSessionProvider } from '../interactive/sessionProvider'
 
 import { LocalStorage } from './LocalStorageProvider'
 import { CODY_ACCESS_TOKEN_SECRET, InMemorySecretStorage, SecretStorage, VSCodeSecretStorage } from './secret-storage'
@@ -150,6 +152,14 @@ export const CommandsProvider = async (context: vscode.ExtensionContext): Promis
     const executeRecipe = async (recipe: string): Promise<void> => {
         await vscode.commands.executeCommand('cody.chat.focus')
         await chatProvider.executeRecipe(recipe)
+    }
+
+    if (config.experimentalInteractive) {
+        await vscode.commands.executeCommand('setContext', 'cody.interactiveSession.enabled', true)
+        disposables.push(
+            vscode.interactive.registerInteractiveSessionProvider('cody', new InteractiveSessionProvider()),
+            vscode.interactive.registerInteractiveEditorSessionProvider(new InteractiveEditorSessionProvider())
+        )
     }
 
     vscode.Disposable.from(...disposables)

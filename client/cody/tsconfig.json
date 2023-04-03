@@ -6,6 +6,7 @@
     "sourceRoot": "src",
     "outDir": "out",
     "jsx": "react-jsx",
+    "types": ["./src/vscode.proposed.inlineCompletionsAdditions.d.ts", "./src/vscode.proposed.interactive.d.ts"],
   },
   "include": [
     "src",

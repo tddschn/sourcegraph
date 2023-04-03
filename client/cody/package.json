@@ -47,7 +47,19 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "enabledApiProposals": [
+    "inlineCompletionsAdditions",
+    "interactive"
+  ],
   "contributes": {
+    "interactiveSession": [
+      {
+        "label": "Cody",
+        "id": "cody",
+        "icon": "",
+        "when": "cody.interactiveSession.enabled"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -112,6 +124,18 @@
       {
         "command": "cody.experimental.suggest",
         "title": "Ask Cody: View Suggestions"
+      },
+      {
+        "command": "interactiveEditor.start",
+        "title": "Start Cody Chat",
+        "enablement": "cody.interactiveSession.enabled && !editorReadonly",
+        "category": "Cody"
+      },
+      {
+        "command": "cody.interactiveEditor.explain",
+        "title": "Explain",
+        "enablement": "cody.interactiveSession.enabled && !editorReadonly",
+        "category": "Cody"
       }
     ],
     "keybindings": [
@@ -169,6 +193,11 @@
           "submenu": "cody.submenu",
           "group": "7_modification",
           "when": "cody.activated"
+        },
+        {
+          "command": "interactiveEditor.start",
+          "when": "cody.interactiveSession.enabled && !editorReadonly",
+          "group": "Cody"
         }
       ],
       "cody.submenu": [
@@ -231,13 +260,16 @@
         },
         "cody.experimental.keys.openai": {
           "type": "string"
+        },
+        "cody.experimental.interactive": {
+          "type": "boolean"
         }
       }
     }
   },
   "dependencies": {
-    "openai": "^3.2.1",
     "@sourcegraph/cody-shared": "workspace:*",
-    "@sourcegraph/cody-ui": "workspace:*"
+    "@sourcegraph/cody-ui": "workspace:*",
+    "openai": "^3.2.1"
   }
 }
