@@ -203,6 +203,7 @@
         },
         "cody.serverEndpoint": {
           "type": "string",
+          "format": "uri",
           "default": "https://<instance>.sourcegraph.com",
           "example": "https://<instance>.sourcegraph.com",
           "description": "URL to the Sourcegraph instance."
