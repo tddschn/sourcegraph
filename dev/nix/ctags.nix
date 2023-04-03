@@ -1,4 +1,7 @@
 { nixpkgs, utils }:
+let
+  makeStatic = (import ./util.nix).makeStatic;
+in
 rec {
   overlay = self: super: rec {
     universal-ctags = super.universal-ctags.overrideAttrs (old: {
@@ -17,15 +20,32 @@ rec {
   packages = nixpkgs.lib.genAttrs utils.lib.defaultSystems
     (system:
       let
-        pkg = if nixpkgs.legacyPackages.${system}.hostPlatform.isMacOS then "pkgs" else "pkgsStatic";
+        isMacOS = nixpkgs.legacyPackages.${system}.hostPlatform.isMacOS;
+        pkg = if isMacOS then "pkgs" else "pkgsStatic";
         pkgs = (import nixpkgs { inherit system; overlays = [ overlay ]; }).${pkg};
+        pkgOverrides = rec {
+          pcre2 = if isMacOS then (makeStatic pkgs.pcre2) else pkgs.pcre2;
+          libyaml = if isMacOS then (makeStatic pkgs.libyaml) else pkgs.libyaml;
+          jansson =
+            if isMacOS then
+              pkgs.jansson.overrideAttrs
+                (oldAttrs: {
+                  cmakeFlags = [ "-DJANSSON_BUILD_SHARED_LIBS=OFF" ];
+                }) else pkgs.jansson;
+        };
       in
       {
-        ctags = pkgs.universal-ctags.override {
+        ctags = (pkgs.universal-ctags.override {
           # static python is a hassle, and its only used for docs here so we dont care about
           # it being static or not
           python3 = nixpkgs.legacyPackages.${system}.python3;
-        };
+          pcre2 = pkgOverrides.pcre2;
+          libyaml = pkgOverrides.libyaml;
+          jansson = pkgOverrides.jansson;
+        }).overrideAttrs (oldAttrs: {
+          # don't include libintl/gettext
+          dontAddExtraLibs = true;
+        });
       }
     );
 }
