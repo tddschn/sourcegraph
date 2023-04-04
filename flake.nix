@@ -23,6 +23,7 @@
       packages = fold recursiveUpdate { } [
         ((import ./dev/nix/ctags.nix { inherit nixpkgs utils; }).packages)
         (import ./dev/nix/p4-fusion.nix { inherit nixpkgs utils; })
+        (import ./dev/nix/comby.nix { inherit nixpkgs utils; })
       ];
     };
 }
