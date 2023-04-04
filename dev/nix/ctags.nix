@@ -45,6 +45,14 @@ rec {
         }).overrideAttrs (oldAttrs: {
           # don't include libintl/gettext
           dontAddExtraLibs = true;
+          # doesn't actually change anything in practice, just makes otool -L not display nix store paths for libiconv and libxml.
+          # they exist in macos dydl cache anyways, so where they point to is irrelevant. worst case, this will let you catch earlier
+          # when a library that should be statically linked or that isnt in dydl cache is dynamically linked.
+          postFixup = with pkgs; (oldAttrs.postFixup or "") + nixpkgs.lib.optionalString isMacOS ''
+            for lib in $(otool -L $out/bin/ctags | ${coreutils}/bin/tail -n +2 | ${coreutils}/bin/cut -d' ' -f1 | ${gnugrep}/bin/grep nix); do
+              install_name_tool -change "$lib" "@rpath/$(basename $lib)" $out/bin/ctags
+            done
+          '';
         });
       }
     );
