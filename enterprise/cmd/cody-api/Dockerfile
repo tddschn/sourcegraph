@@ -13,7 +13,6 @@ RUN apk update && apk add --no-cache \
     tini
 
 USER sourcegraph
-# TODO
-EXPOSE 3189
+EXPOSE 4100
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/cody-api"]
 COPY cody-api /usr/local/bin/
