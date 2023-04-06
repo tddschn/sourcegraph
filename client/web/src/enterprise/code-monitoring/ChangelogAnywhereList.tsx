@@ -1,6 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
-
-import { gql, useApolloClient } from '@apollo/client'
+import React, { useEffect, useState } from 'react'
 
 import { LazyQueryInput } from '@sourcegraph/branded'
 import { Client, createClient } from '@sourcegraph/cody-shared/src/chat/client'
@@ -8,11 +6,17 @@ import { renderMarkdown } from '@sourcegraph/cody-shared/src/chat/markdown'
 import { ChatMessage } from '@sourcegraph/cody-shared/src/chat/transcript/messages'
 import { Message } from '@sourcegraph/cody-shared/src/sourcegraph-api'
 import { ErrorLike, isErrorLike } from '@sourcegraph/common'
+import { useLazyQuery, gql } from '@sourcegraph/http-client'
 import { QueryState } from '@sourcegraph/shared/src/search'
-import { Container, Link, H2, H3, Button, Markdown, LoadingSpinner } from '@sourcegraph/wildcard'
+import { Container, Link, H2, H3, Button, Markdown, LoadingSpinner, ErrorAlert } from '@sourcegraph/wildcard'
 
 import { AuthenticatedUser } from '../../auth'
-import { SearchForChangesResult, SearchForChangesVariables, SearchPatternType } from '../../graphql-operations'
+import {
+    SearchCommitSearchResult,
+    SearchForChangesResult,
+    SearchForChangesVariables,
+    SearchPatternType,
+} from '../../graphql-operations'
 
 import { CodeMonitoringPageProps } from './CodeMonitoringPage'
 
@@ -157,6 +161,97 @@ const preamble: Message[] = [
     },
 ]
 
+const markdownPreamble1 = {
+    input: {
+        heading: 'Update delivering-impact-reviews.md (#6630)',
+        description: null,
+        diff: 'content/departments/people-talent/people-ops/process/teammate-sentiment/impact-reviews/delivering-impact-reviews.md content/departments/people-talent/people-ops/process/teammate-sentiment/impact-reviews/delivering-impact-reviews.md\n@@ -4,3 +4,3 @@ \n \n-Impact reviews will be delivered synchronously in a 1:1 between the Manager and their direct report. Each Manager is responsible for scheduling a 30 - 60 minute (recommended) meeting with each Teammate to deliver their review packet, along with any corresponding promotion or compensation increases. All conversations must take place no later than **October 14 at the latest.**\n+Impact reviews will be delivered synchronously in a 1:1 between the Manager and their direct report. Each Manager is responsible for scheduling a 30 - 60 minute (recommended) meeting with each Teammate to deliver their review packet, along with any corresponding promotion or compensation increases. All conversations must take place no later than \\*_April 26, 2023 for H1 FY24 Impact Review Cycle_\n \n',
+    },
+    output: `
+    This change updated the deadline for delivering impact reviews.
+    - Old deadline: October 14
+    - New deadline: April 26, 2023 (H1 FY24 Impact Review Cycle)
+    `,
+}
+
+const markdownPreamble2 = {
+    input: {
+        heading: 'updates customer information (#6625)',
+        description: 'updated private with more examples of customer information',
+        diff: 'content/company-info-and-process/policies/data-sharing.md content/company-info-and-process/policies/data-sharing.md\n@@ -53,3 +53,3 @@ Below you can find a matrix to help you make informed decisions about what data\n    </td>\n-   <td>Customer private source code\n+   <td>Customer private source code snippets (for support purposes)\n    </td>\n@@ -63,3 +63,3 @@ Below you can find a matrix to help you make informed decisions about what data\n    </td>\n-   <td>private repository names, legal contracts, company financials, incident reports for security issues \n+   <td>Customer roadmaps, customer number of codebases, customer challenges, private repository names, legal contracts, company financials, incident reports for security issues, private repository names, legal contracts, company financials, incident reports for security issues \n    </td>\n',
+    },
+    output: `
+    - Updated customer information in the data-sharing policy
+    - Added more examples of private customer information
+    - Examples include:
+        - Customer roadmaps
+        - Number of customer codebases
+        - Customer challenges
+        - Private repository names (repeated)
+        - Legal contracts (repeated)
+        - Company financials (repeated)
+        - Incident reports for security issues (repeated)
+        - Customer private source code snippets (for support purposes)
+        - This change updated the customer information policy.
+    `,
+}
+
+const humanCommitPreamble = `
+I want you to summarize a change for me, here's an example of a previous conversation we had, so you can understand what to do:\n\n
+
+Human:\n\n
+${JSON.stringify(markdownPreamble1.input)}\n\n
+
+Generate a high-level summary of this change in a readable bullet-point list.
+Do: Use all the information available to build your summary.
+Don't: Mention details like specific files changed or commit hashes.\n\n
+
+Assistant:\n\n
+${markdownPreamble1.output}\n\n
+
+Human:\n\n
+${JSON.stringify(markdownPreamble2.input)}\n\n
+
+Generate a high-level summary of this change in a readable bullet-point list.
+Do: Use all the information available to build your summary.
+Don't: Mention details like specific files changed or commit hashes.\n\n
+`
+
+const assistantCommitPreamble = `
+Assistant:\n\n
+${markdownPreamble2.output}\n\n
+`
+
+const preambleCommit: Message[] = [
+    {
+        speaker: 'human',
+        text: humanCommitPreamble,
+    },
+    {
+        speaker: 'assistant',
+        text: assistantCommitPreamble,
+    },
+]
+
+interface CommitPromptInput {
+    input: {
+        heading: string
+        description: string | null
+        diff: string | null
+    }
+}
+
+const getCommitPrompt = ({ input }: CommitPromptInput): string => `
+Human:\n\n
+${JSON.stringify(input)}\n\n.
+
+Generate a high-level summary of this change in a readable bullet-point list.
+Do: Use all the information available to build your summary.
+Don't: Mention details like specific files changed or commit hashes.\n\n
+
+Assistant:\n\n
+- `
+
 interface ExampleChangelogProps {
     name: string
     query: string
@@ -168,65 +263,35 @@ const SEARCH_QUERY = gql`
             results {
                 results {
                     ... on CommitSearchResult {
-                        commit {
-                            message
-                        }
+                        ...SearchCommitSearchResult
                     }
                 }
             }
         }
     }
+
+    fragment SearchCommitSearchResult on CommitSearchResult {
+        url
+        diffPreview {
+            value
+        }
+        commit {
+            subject
+            body
+        }
+    }
 `
 
 const ExampleChangelog: React.FunctionComponent<ExampleChangelogProps> = ({ name, query }) => {
-    const apolloClient = useApolloClient()
     const [queryState, setQueryState] = useState<QueryState>({ query })
-    const [messageInProgress, setMessageInProgress] = useState<ChatMessage | null>(null)
-    const [transcript, setTranscript] = useState<ChatMessage[]>([])
-    const [codyClient, setCodyClient] = useState<Client | ErrorLike>()
-    const [searchLoading, setSearchLoading] = useState<boolean>(false)
+    const [searchForCommits, { data, loading, error }] = useLazyQuery<
+        SearchForChangesResult,
+        SearchForChangesVariables
+    >(SEARCH_QUERY, {
+        variables: { query },
+    })
 
-    useEffect(() => {
-        createClient({
-            config: { serverEndpoint: window.location.origin, useContext: 'embeddings' },
-            accessToken: null,
-            setMessageInProgress,
-            setTranscript,
-            preamble,
-        }).then(setCodyClient, setCodyClient)
-    }, [])
-
-    const onSubmit = useCallback(
-        async (text: string) => {
-            if (codyClient && !isErrorLike(codyClient)) {
-                setSearchLoading(true)
-                const { data } = await apolloClient.query<SearchForChangesResult, SearchForChangesVariables>({
-                    query: SEARCH_QUERY,
-                    variables: { query: text },
-                })
-                setSearchLoading(false)
-
-                const commits: string[] = []
-
-                const results = data.search?.results.results ?? []
-
-                for (const result of results) {
-                    if (result.__typename === 'CommitSearchResult') {
-                        commits.push(result.commit.message)
-                    }
-                }
-
-                if (commits.length === 0) {
-                    throw new Error('Unable to find commits')
-                }
-
-                codyClient.submitMessage(getPrompt({ commits }))
-            }
-        },
-        [apolloClient, codyClient]
-    )
-
-    const lastResponse = transcript[transcript.length - 1]?.speaker === 'assistant' && transcript[transcript.length - 1]
+    const results = data?.search?.results.results as SearchCommitSearchResult[]
 
     return (
         <Container className="mt-2">
@@ -247,31 +312,91 @@ const ExampleChangelog: React.FunctionComponent<ExampleChangelogProps> = ({ name
                 />
             </div>
             <div className="d-flex flex-column align-items-center mt-2">
-                {searchLoading ? (
+                {loading ? (
                     <>
                         <LoadingSpinner />
                         <small>Looking for changes...</small>
                     </>
-                ) : messageInProgress ? (
+                ) : error ? (
                     <>
-                        <LoadingSpinner />
-                        <small>Generating changelog...</small>
+                        <ErrorAlert error={error} />
                     </>
-                ) : lastResponse ? (
+                ) : results ? (
                     <Container className="w-100">
-                        <Markdown dangerousInnerHTML={renderMarkdown(lastResponse.displayText)} />
+                        {results.map((result, index) => (
+                            <ExampleChangeLogCommit change={result} key={index} />
+                        ))}
                     </Container>
                 ) : (
                     <Button
                         variant="primary"
-                        onClick={() => onSubmit(queryState.query)}
-                        disabled={Boolean(lastResponse) || searchLoading || Boolean(messageInProgress)}
+                        onClick={() => searchForCommits()}
+                        disabled={Boolean(results) || loading}
+                        className="align-self-start"
                     >
                         Generate changelog
                     </Button>
                 )}
             </div>
         </Container>
+    )
+}
+
+interface ExampleChangeLogCommitProps {
+    change: SearchCommitSearchResult
+}
+
+const ExampleChangeLogCommit: React.FunctionComponent<ExampleChangeLogCommitProps> = ({ change }) => {
+    const [expanded, setExpanded] = useState<boolean>(false)
+
+    const [messageInProgress, setMessageInProgress] = useState<ChatMessage | null>(null)
+    const [transcript, setTranscript] = useState<ChatMessage[]>([])
+    const [codyClient, setCodyClient] = useState<Client | ErrorLike>()
+
+    useEffect(() => {
+        createClient({
+            config: { serverEndpoint: window.location.origin, useContext: 'embeddings' },
+            accessToken: null,
+            setMessageInProgress,
+            setTranscript,
+            preamble: preambleCommit,
+        }).then(setCodyClient, setCodyClient)
+    }, [])
+
+    useEffect(() => {
+        if (codyClient && !isErrorLike(codyClient)) {
+            const input = {
+                heading: '',
+                // heading: change.commit.subject,
+                description: '',
+                // description: change.commit.body,
+                diff: change.diffPreview?.value ?? null,
+            }
+            codyClient.submitMessage(getCommitPrompt({ input }))
+        }
+    }, [change, codyClient])
+
+    const lastResponse = transcript[transcript.length - 1]?.speaker === 'assistant' && transcript[transcript.length - 1]
+
+    return (
+        <div className="d-flex flex-column mb-3">
+            <div className="d-flex align-items-center justify-content-between">
+                <Link to={change.url}>
+                    <H3 className="mb-2">{change.commit.subject}</H3>
+                </Link>
+            </div>
+            <div>
+                {messageInProgress && (
+                    <>
+                        <LoadingSpinner />
+                        <small>Generating summary...</small>
+                    </>
+                )}
+                {lastResponse && lastResponse.speaker === 'assistant' && (
+                    <Markdown dangerousInnerHTML={renderMarkdown(lastResponse.displayText)} />
+                )}
+            </div>
+        </div>
     )
 }
 
@@ -287,19 +412,27 @@ export const ChangelogAnywhereList: React.FunctionComponent<React.PropsWithChild
                 </div>
                 <ExampleChangelog
                     name="Staying up to date: Cody changes in the Sourcegraph repo, in the last week"
-                    query='patterntype:regexp repo:^github.com/sourcegraph/sourcegraph$ file:client/cody/. type:commit after:"1 week ago"'
+                    query='patterntype:regexp repo:^github.com/sourcegraph/sourcegraph$ file:client/cody/. type:diff after:"1 week ago"'
                 />
                 <ExampleChangelog
                     name="Incident runbook: Infrastructure changes across Sourcegraph repos, in the last month"
-                    query='patterntype:regexp repo:github.com/sourcegraph/. type:commit after:"1 month ago" file:(.tf$|.tfvars$)'
+                    query='patterntype:regexp repo:github.com/sourcegraph/. type:diff after:"1 month ago" file:(.tf$|.tfvars$)'
                 />
                 <ExampleChangelog
                     name="Morning catch up: Frontend changes since yesterday"
-                    query='patterntype:regexp repo:^github\.com/sourcegraph/sourcegraph$ type:commit lang:TypeScript after:"yesterday"'
+                    query='patterntype:regexp repo:^github\.com/sourcegraph/sourcegraph$ type:diff lang:TypeScript after:"yesterday"'
                 />
                 <ExampleChangelog
                     name="What changed in the handbook in the last week?"
-                    query='patterntype:regexp repo:^github\.com/sourcegraph/handbook$ type:commit after:"1 week ago"'
+                    query='patterntype:regexp repo:^github\.com/sourcegraph/handbook$ type:diff after:"1 week ago"'
+                />
+                <ExampleChangelog
+                    name="What's new in the Sourcegraph docs this week?"
+                    query='patternType:regexp repo:^github\.com/sourcegraph/sourcegraph$ type:diff file:doc/. after:"1 week ago"'
+                />
+                <ExampleChangelog
+                    name="What did I do last week??"
+                    query='patternType:regexp repo:^github\.com/sourcegraph/sourcegraph$ type:diff author:umpox after:"10 weeks ago"'
                 />
             </div>
         </div>
