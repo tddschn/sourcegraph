@@ -14,11 +14,17 @@ import { Transcript } from './transcript'
 import { ChatMessage } from './transcript/messages'
 import { reformatBotMessage } from './viewHelpers'
 
+interface Message {
+    speaker: 'human' | 'assistant'
+    text: string
+}
+
 export interface ClientInit {
     config: Pick<Configuration, 'serverEndpoint' | 'codebase' | 'useContext'>
     accessToken: string | null
     setMessageInProgress: (messageInProgress: ChatMessage | null) => void
     setTranscript: (transcript: ChatMessage[]) => void
+    preamble?: Message[]
 }
 
 export interface Client {
@@ -30,6 +36,7 @@ export async function createClient({
     accessToken,
     setMessageInProgress,
     setTranscript,
+    preamble,
 }: ClientInit): Promise<Client> {
     const completionsClient = new SourcegraphBrowserCompletionsClient(
         config.serverEndpoint,
@@ -108,7 +115,8 @@ export async function createClient({
             transcript.addInteraction(interaction)
             sendTranscript()
 
-            const prompt = await transcript.toPrompt()
+            const prompt = await transcript.toPrompt(preamble)
+            // TODO: Remove hardcoded
             const responsePrefix = interaction.getAssistantMessage().prefix ?? ''
 
             chatClient.chat(prompt, {
