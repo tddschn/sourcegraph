@@ -303,7 +303,7 @@ const ExampleChangelog: React.FunctionComponent<ExampleChangelogProps> = ({ name
                     className="test-trigger-input"
                     patternType={SearchPatternType.standard}
                     caseSensitive={false}
-                    isSourcegraphDotCom={false}
+                    isSourcegraphDotCom={window.context.sourcegraphDotComMode}
                     queryState={queryState}
                     onChange={setQueryState}
                     preventNewLine={true}
@@ -431,8 +431,12 @@ export const ChangelogAnywhereList: React.FunctionComponent<React.PropsWithChild
                     query='patternType:regexp repo:^github\.com/sourcegraph/sourcegraph$ type:diff file:doc/. after:"1 week ago"'
                 />
                 <ExampleChangelog
-                    name="What did I do last week??"
+                    name="What did I do last week?"
                     query='patternType:regexp repo:^github\.com/sourcegraph/sourcegraph$ type:diff author:umpox after:"10 weeks ago"'
+                />
+                <ExampleChangelog
+                    name="What has the React team been working on?"
+                    query='patternType:regexp repo:^github\.com/facebook/react$ type:diff after:"last week"'
                 />
             </div>
         </div>
