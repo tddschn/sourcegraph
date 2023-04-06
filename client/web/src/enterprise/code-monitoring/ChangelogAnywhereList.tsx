@@ -4,6 +4,8 @@ import { LazyQueryInput } from '@sourcegraph/branded'
 import { Client, createClient } from '@sourcegraph/cody-shared/src/chat/client'
 import { renderMarkdown } from '@sourcegraph/cody-shared/src/chat/markdown'
 import { ChatMessage } from '@sourcegraph/cody-shared/src/chat/transcript/messages'
+import { CHARS_PER_TOKEN, MAX_RECIPE_INPUT_TOKENS } from '@sourcegraph/cody-shared/src/prompt/constants'
+import { truncateText } from '@sourcegraph/cody-shared/src/prompt/truncation'
 import { Message } from '@sourcegraph/cody-shared/src/sourcegraph-api'
 import { ErrorLike, isErrorLike } from '@sourcegraph/common'
 import { useLazyQuery, gql } from '@sourcegraph/http-client'
@@ -77,89 +79,6 @@ const MOCK_QUERIES = {
     codyUpdates:
         'patterntype:regexp repo:^github.com/sourcegraph/sourcegraph$ file:client/cody/. type:commit after:"1 week ago"',
 }
-
-const getPrompt = ({ commits }: { commits: string[] }): string => `
-${commits}\n\n
-Write these commits as detailed release notes.\n
-The release notes should be written in a format that can easily be understood by anyone.\n
-Do not mention the commit hashes.\n
-Do not try to preserve any links`
-
-const humanPreamble = getPrompt({ commits: MOCK_COMMITS_PREAMBLE })
-
-const assistantPreamble = `
-## Changelog\n\n
-
-### Use native links in references panel\n\n
-- Improved the implementation of the references panel by using native <a> tags instead of <div role="link">.
-- Added native onDoubleClick handler support, allowing users to open a reference directly in the blob view with a normal double click.
-- Enabled right click => Open link in new tab functionality.
-- Cmd+click now opens the symbol in a new tab.
-- Fixed font inconsistency by using var(--code-font-family); for rendering references.
-- Web: Remove CodeMirror from the initial chunk
-- Removed CodeMirror from the initial chunk to reduce the load time of the web app.
-- Introduced a new lazy-loaded component EnterpriseRepositoryFileTreePage to handle the use of CodeMirror on the route level.\n\n
-
-### Codeintel: Revive braindot\n\n
-- Revived the braindot feature in code intelligence.\n\n
-
-### Better import ordering with Prettier\n\n
-- Improved import ordering in the codebase using Prettier.\n\n
-
-### Merge the history from the Cody repository\n\n
-- Merged the history from the Cody repository into the main repository.
-- The Cody repository's prototype frontends will be replaced with calls to #48248.
-- The client/cody directory will now focus on the Cody VSCode extension.\n\n
-
-### Add local navigation via tree-sitter for Perl\n\n
-- Implemented local symbols for Perl using the new scip-syntax.\n\n
-
-### Ship new accessible file and symbol tree\n\n
-- Introduced a new accessible file and symbol tree.\n\n
-
-### Change useExperimentalFeatures to use the new useSettings API\n\n
-- Updated the useExperimentalFeatures hook to use the new useSettings API.\n\n
-
-### Test: Move mockReactVisibilitySensor to shared/testing\n\n
-- Moved mockReactVisibilitySensor to shared/testing to improve test setup and execution.\n\n
-
-### Enable CodeMirror file view by default\n\n
-- CodeMirror file view is now enabled by default.\n\n
-
-### Remove ThemeProps and add new theme state logic\n\n
-- Replaced ThemeProps with a more standard global state distribution using React Context.
-- Simplified theme state logic and improved performance when changing themes.\n\n
-
-### Web: Upgrade react-router to v6\n\n
-- Upgraded react-router to version 6.
-- Migrated the web application to the data-aware router introduced in v6.4.0.
-- Migrated history.block usages to the unstable_useBlock hook introduced in v6.7.0.
-- Removed explicit history reference from the renderWithBrandedContext utility used in unit tests.
-- Migrated the search-query state observer from history.listen to useLocation API.\n\n
-
-### Reference panel: Don't error when language spec cannot be found\n\n
-- Updated the reference panel to return undefined/null when the language spec is not available, letting the UI handle the case.\n\n
-
-### Fix padding in ReferencesPanel\n\n
-- Fixed the height calculation for the scrollable viewport and adjusted padding in the ReferencesPanel.\n\n
-
-### Web: Remove history from the blob components\n\n
-- Removed the history reference from the blob components to reduce complexity.\n\n
-
-### Cleanup up legacy blob view\n\n
-- Cleaned up the legacy blob view to improve code quality.\n\n
-`
-
-const preamble: Message[] = [
-    {
-        speaker: 'human',
-        text: humanPreamble,
-    },
-    {
-        speaker: 'assistant',
-        text: assistantPreamble,
-    },
-]
 
 const markdownPreamble1 = {
     input: {
@@ -346,9 +265,28 @@ interface ExampleChangeLogCommitProps {
     change: SearchCommitSearchResult
 }
 
-const ExampleChangeLogCommit: React.FunctionComponent<ExampleChangeLogCommitProps> = ({ change }) => {
-    const [expanded, setExpanded] = useState<boolean>(false)
+function formatPrompt(result: SearchCommitSearchResult): CommitPromptInput {
+    const maxPromptLength = MAX_RECIPE_INPUT_TOKENS * CHARS_PER_TOKEN
+    const heading = truncateText(result.commit.subject, maxPromptLength)
 
+    const remainingLengthAfterHeading = maxPromptLength - heading.length
+    const description = result.commit.body ? truncateText(result.commit.body, remainingLengthAfterHeading) : null
+
+    const remainingLengthAfterDescription = remainingLengthAfterHeading - (description ? description.length : 0)
+    const diff = result.diffPreview?.value
+        ? truncateText(result.diffPreview?.value, remainingLengthAfterDescription)
+        : null
+
+    return {
+        input: {
+            heading,
+            description,
+            diff,
+        },
+    }
+}
+
+const ExampleChangeLogCommit: React.FunctionComponent<ExampleChangeLogCommitProps> = ({ change }) => {
     const [messageInProgress, setMessageInProgress] = useState<ChatMessage | null>(null)
     const [transcript, setTranscript] = useState<ChatMessage[]>([])
     const [codyClient, setCodyClient] = useState<Client | ErrorLike>()
@@ -365,14 +303,8 @@ const ExampleChangeLogCommit: React.FunctionComponent<ExampleChangeLogCommitProp
 
     useEffect(() => {
         if (codyClient && !isErrorLike(codyClient)) {
-            const input = {
-                heading: '',
-                // heading: change.commit.subject,
-                description: '',
-                // description: change.commit.body,
-                diff: change.diffPreview?.value ?? null,
-            }
-            codyClient.submitMessage(getCommitPrompt({ input }))
+            const promptInput = formatPrompt(change)
+            codyClient.submitMessage(getCommitPrompt(promptInput))
         }
     }, [change, codyClient])
 
