@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import classNames from 'classnames'
 import { useNavigate } from 'react-router-dom'
 
+import { AuthenticatedUser } from '@sourcegraph/shared/src/auth'
 import { SearchPatternType } from '@sourcegraph/shared/src/graphql-operations'
 import { useIsLightTheme } from '@sourcegraph/shared/src/theme'
 import { buildSearchURLQuery } from '@sourcegraph/shared/src/util/url'
@@ -17,7 +18,7 @@ import searchPageStyles from '../../../storm/pages/SearchPage/SearchPageContent.
 import styles from './CodySearchPage.module.scss'
 import { translateToQuery } from './translateToQuery'
 
-export const CodySearchPage: React.FunctionComponent<{}> = () => {
+export const CodySearchPage: React.FunctionComponent<{ authenticatedUser: AuthenticatedUser }> = ({ authenticatedUser }) => {
     useEffect(() => {
         eventLogger.logPageView('CodySearch')
     }, [])
@@ -42,7 +43,7 @@ export const CodySearchPage: React.FunctionComponent<{}> = () => {
     const onSubmit = useCallback(() => {
         eventLogger.log('web:codySearch:submit', { input })
         setLoading(true)
-        translateToQuery(input).then(
+        translateToQuery(input, authenticatedUser).then(
             query => {
                 setLoading(false)
 
@@ -63,7 +64,7 @@ export const CodySearchPage: React.FunctionComponent<{}> = () => {
                 setInputError(`Unable to reach Cody. Error: ${error?.message}`)
             }
         )
-    }, [navigate, input])
+    }, [navigate, input, authenticatedUser])
 
     const isLightTheme = useIsLightTheme()
 
