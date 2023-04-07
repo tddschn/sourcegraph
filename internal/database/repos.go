@@ -95,6 +95,7 @@ type RepoStore interface {
 	ListMinimalRepos(context.Context, ReposListOptions) ([]types.MinimalRepo, error)
 	Metadata(context.Context, ...api.RepoID) ([]*types.SearchedRepo, error)
 	StreamMinimalRepos(context.Context, ReposListOptions, func(*types.MinimalRepo)) error
+	RepoEmbeddingExists(ctx context.Context, repoID api.RepoID) (bool, error)
 }
 
 var _ RepoStore = (*repoStore)(nil)
@@ -876,6 +877,20 @@ func (s *repoStore) StreamMinimalRepos(ctx context.Context, opt ReposListOptions
 	}
 
 	return nil
+}
+
+const repoEmbeddingExists = `SELECT EXISTS(SELECT 1 FROM repo_embedding_jobs WHERE repo_id = %s AND state = 'completed')`
+
+// RepoEmbeddingExists returns boolean indicating whether embeddings are generated for the repo.
+func (s *repoStore) RepoEmbeddingExists(ctx context.Context, repoID api.RepoID) (bool, error) {
+	q := sqlf.Sprintf(repoEmbeddingExists, repoID)
+	var exists bool
+
+	if err := s.QueryRow(ctx, q).Scan(&exists); err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }
 
 // ListMinimalRepos returns a list of repositories names and ids.
