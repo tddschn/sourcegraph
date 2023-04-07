@@ -884,13 +884,9 @@ const repoEmbeddingExists = `SELECT EXISTS(SELECT 1 FROM repo_embedding_jobs WHE
 // RepoEmbeddingExists returns boolean indicating whether embeddings are generated for the repo.
 func (s *repoStore) RepoEmbeddingExists(ctx context.Context, repoID api.RepoID) (bool, error) {
 	q := sqlf.Sprintf(repoEmbeddingExists, repoID)
-	var exists bool
+	exists, _, err := basestore.ScanFirstBool(s.Query(ctx, q))
 
-	if err := s.QueryRow(ctx, q).Scan(&exists); err != nil {
-		return false, err
-	}
-
-	return exists, nil
+	return exists, err
 }
 
 // ListMinimalRepos returns a list of repositories names and ids.
