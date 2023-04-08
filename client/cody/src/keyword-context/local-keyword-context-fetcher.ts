@@ -4,11 +4,62 @@ import * as path from 'path'
 import { removeStopwords } from 'stopword'
 import StreamValues from 'stream-json/streamers/StreamValues'
 import * as vscode from 'vscode'
+import winkUtils from 'wink-nlp-utils'
 
 import { Editor } from '@sourcegraph/cody-shared/src/editor'
 import { KeywordContextFetcher, KeywordContextFetcherResult } from '@sourcegraph/cody-shared/src/keyword-context'
 
 const fileExtRipgrepParams = ['-Tmarkdown', '-Tyaml', '-Tjson', '-g', '!*.lock']
+
+/**
+ * keywordTerm represents a single term in the keyword search
+ */
+interface Term {
+    stem: string
+    original: string[]
+    prefix: string
+    count: number
+}
+
+function regexForTerm(t: Term): string {
+    if (t.prefix.length >= 3) {
+        return escapeRegex(t.prefix)
+    }
+    return `(?:${escapeRegex(t.original)}|${escapeRegex(t.stem)})`
+}
+
+function userQueryToKeywordQuery(query: string): Term[] {
+    const longestCommonPrefix = (s: string, t: string): string => {
+        let endIdx = 0
+        for (let i = 0; i < s.length && i < t.length; i++) {
+            if (s[i] !== t[i]) {
+                break
+            }
+            endIdx = i + 1
+        }
+        return s.slice(0, endIdx)
+    }
+
+    const origWords: string[] = []
+    for (const chunk of query.split(/\W+/)) {
+        if (chunk.trim().length === 0) {
+            continue
+        }
+        origWords.push(...winkUtils.string.tokenize0(chunk))
+    }
+    const filteredWords = winkUtils.tokens.removeWords(origWords)
+    const terms: Term[] = []
+    for (const word of filteredWords) {
+        const stem = winkUtils.string.stem(word)
+        terms.push({
+            // NEXT 0: handle duplicate originals, fix this squiggly
+            original: word,
+            stem,
+            prefix: longestCommonPrefix(word, stem),
+        })
+    }
+    return terms
+}
 
 export class LocalKeywordContextFetcher implements KeywordContextFetcher {
     constructor(private rgPath: string, private editor: Editor) {}
@@ -75,7 +126,7 @@ export class LocalKeywordContextFetcher implements KeywordContextFetcher {
     }
 
     private async fetchFileMatches(
-        keywords: string[],
+        keywords: Term[],
         rootPath: string
     ): Promise<{
         totalFiles: number
@@ -88,7 +139,7 @@ export class LocalKeywordContextFetcher implements KeywordContextFetcher {
                     const out = await new Promise<string>((resolve, reject) => {
                         execFile(
                             this.rgPath,
-                            [...fileExtRipgrepParams, '--count-matches', '--stats', `\\b${term}`, './'],
+                            [...fileExtRipgrepParams, '--count-matches', '--stats', `\\b${regexForTerm(term)}`, './'],
                             {
                                 cwd: rootPath,
                                 maxBuffer: 1024 * 1024 * 1024,
@@ -142,6 +193,7 @@ export class LocalKeywordContextFetcher implements KeywordContextFetcher {
         for (let i = 0; i < keywords.length; i++) {
             const term = keywords[i]
             const fileCounts = termFileCountsArr[i].fileCounts
+            // NEXT 1: how to keep track of # of files each term appears in <- key off stem, not necessarily unique
             termTotalFiles[term] = Object.keys(fileCounts).length
 
             for (const [filename, count] of Object.entries(fileCounts)) {
@@ -159,14 +211,33 @@ export class LocalKeywordContextFetcher implements KeywordContextFetcher {
         }
     }
 
-    private async fetchKeywordFiles(rootPath: string, query: string): Promise<{ filename: string; score: number }[]> {
-        const terms = query.split(/\W+/)
-        // TODO: Stemming using the `natural` package was introducing failing licensing checks. Find a replacement stemming package.
-        const stemmedTerms = terms.map(term => escapeRegex(term))
-        // unique stemmed keywords, our representation of the user query
-        const filteredTerms = Array.from(new Set(removeStopwords(stemmedTerms).filter(term => term.length >= 3)))
+    private async fetchKeywordFiles(
+        rootPath: string,
+        rawQuery: string
+    ): Promise<{ filename: string; score: number }[]> {
+        // console.log('# winkUtils.string.tokenize0', winkUtils.string.tokenize0(query))
+        // console.log('# winkUtils.string.tokenize', winkUtils.string.tokenize(query))
 
-        const fileMatchesPromise = this.fetchFileMatches(filteredTerms, rootPath)
+        // const wterms = query
+        //     .split(/\W+/)
+        //     .filter(term => term.trim().length > 0)
+        //     .map((term: string): string[] => winkUtils.string.tokenize0(term))
+        //     .flatMap(a => a)
+        //     .filter(term => term.trim().length > 0)
+        // const wtermsFiltered = winkUtils.tokens.removeWords(wterms)
+        // const wstems: string[] = winkUtils.tokens.stem(wtermsFiltered)
+        // const filteredTerms = wstems
+
+        // TODO: Stemming using the `natural` package was introducing failing licensing checks. Find a replacement stemming package.
+        // const terms = query.split(/\W+/)
+        // const stemmedTerms = terms.map(term => escapeRegex(term))
+        // const oldFilteredTerms = Array.from(new Set(removeStopwords(stemmedTerms).filter(term => term.length >= 3)))
+        // console.log('# old keywords', oldFilteredTerms)
+        // console.log('# keywords', filteredTerms)
+
+        const query = userQueryToKeywordQuery(rawQuery)
+
+        const fileMatchesPromise = this.fetchFileMatches(query, rootPath)
         const fileStatsPromise = this.fetchFileStats(filteredTerms, rootPath)
 
         const fileMatches = await fileMatchesPromise

@@ -96,9 +96,9 @@ export class CodyCompletionItemProvider implements vscode.InlineCompletionItemPr
         // TODO(beyang): trigger on context quality (better context means longer completion)
 
         const waiter = new Promise<void>(resolve => setTimeout(() => resolve(), waitMs))
-
-        const results = (await Promise.all(completers.map(c => c.generateCompletions()))).flat()
+        // TODO(beyang): wait for $waitTime - $expectedResultsLatency
         await waiter
+        const results = (await Promise.all(completers.map(c => c.generateCompletions()))).flat()
         return results.map(r => new vscode.InlineCompletionItem(r.content))
     }
 
